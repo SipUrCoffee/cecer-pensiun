@@ -38,18 +38,23 @@
         <div id="loginView" class="bg-white rounded-xl shadow-md overflow-hidden transition-all duration-300 block">
             <div class="bg-blue-600 px-6 py-6 text-center">
                 <h1 class="text-xl md:text-2xl font-bold text-white tracking-wide">PENCATATAN ARSIP TERCECER PENSIUN</h1>
-                <p class="text-blue-100 mt-2 text-sm">Pilih Nama Anda Untuk Memulai</p>
+            </div>
+
+            <!-- Banner Total Kinerja -->
+            <div class="bg-blue-50 border-b border-blue-100 p-4 text-center">
+                <p class="text-sm md:text-base text-blue-800">
+                    Total Kinerja per tanggal <span id="currentDateDisplay" class="font-bold"></span> : <span id="totalKinerjaDisplay" class="font-bold text-lg text-blue-900">Memuat...</span> NIP
+                </p>
             </div>
             
             <div class="p-6 md:p-8 space-y-6">
-                
                 <!-- Dropdown Pilih Nama Petugas -->
                 <div class="space-y-2">
                     <label for="userDropdown" class="block text-sm font-semibold text-gray-700">Nama Petugas</label>
                     <select id="userDropdown" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 outline-none cursor-pointer">
                         <option value="" disabled selected>-- Pilih Nama Anda --</option>
                         <option value="Alfira Risty Elmagita">Alfira Risty Elmagita</option>
-                        <option value="Angghi Bimantoro">Angghi Bimantoro</option>
+                        <option value="Anggi Bhimantara">Anggi Bhimantara</option>
                         <option value="Edward Sampe Sangap">Edward Sampe Sangap</option>
                         <option value="Erika">Erika</option>
                         <option value="Ifal Putra">Ifal Putra</option>
@@ -140,11 +145,10 @@
 
     <script>
         // ====================================================================
-        // KONFIGURASI API 
-        // Isi const di bawah dengan URL Deployment Web App Apps Script Anda!
+        // KONFIGURASI API (Untuk Penggunaan di Luar Apps Script)
         // ====================================================================
-        const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyX0N3--iE90TEDbEJd9vtv_lFf-CfICKXUZdAV3azVlcxNKe_PgHmtQ4FFXLF3jzuJ/exec"; 
-        const SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1ra-KL9StOcrDgoCZJHHmSWgc-S7FqkSs3MlsJUX3VXU/edit?usp=sharing";    // Opsional
+        const GOOGLE_WEB_APP_URL = ""; 
+        const SPREADSHEET_URL = "";    // Opsional (Jika ingin tombol Lihat Data berfungsi secara offline)
         // ====================================================================
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -159,9 +163,50 @@
             const rakInput = document.getElementById('rak');
             const btnSimpan = document.getElementById('btnSimpan');
             
-            // Elemen Halaman Muka
             const userDropdown = document.getElementById('userDropdown');
             const btnMasuk = document.getElementById('btnMasuk');
+
+            // --- Menampilkan Tanggal Hari Ini ---
+            const dateOptions = { day: 'numeric', month: 'long', year: 'numeric' };
+            const todayStr = new Date().toLocaleDateString('id-ID', dateOptions);
+            document.getElementById('currentDateDisplay').textContent = todayStr;
+
+            // --- Memuat Total Kinerja NIP ---
+            function loadTotalKinerja() {
+                if (typeof google !== 'undefined' && google.script && google.script.run) {
+                    // Berjalan di dalam Google Apps Script
+                    google.script.run
+                        .withSuccessHandler(function(total) {
+                            document.getElementById('totalKinerjaDisplay').textContent = total;
+                        })
+                        .getTotalKinerja();
+                } else if (GOOGLE_WEB_APP_URL !== "") {
+                    // Berjalan sebagai API eksternal
+                    fetch(GOOGLE_WEB_APP_URL + "?action=getTotal")
+                        .then(res => res.json())
+                        .then(data => {
+                            if(data.status === 'success') {
+                                document.getElementById('totalKinerjaDisplay').textContent = data.total;
+                            }
+                        })
+                        .catch(err => {
+                            document.getElementById('totalKinerjaDisplay').textContent = "-";
+                        });
+                } else {
+                    document.getElementById('totalKinerjaDisplay').textContent = "0";
+                }
+            }
+
+            // --- Update UI Total Kinerja Pasca Penyimpanan ---
+            function updateTotalKinerjaUI() {
+                const totalEl = document.getElementById('totalKinerjaDisplay');
+                const currentVal = parseInt(totalEl.textContent);
+                if(!isNaN(currentVal)) {
+                    totalEl.textContent = currentVal + 1;
+                }
+            }
+            
+            loadTotalKinerja(); // Panggil saat aplikasi baru dibuka
 
             // --- FUNGSI LOGIN / LOGOUT ---
             btnMasuk.addEventListener('click', function() {
@@ -190,7 +235,7 @@
             });
 
             document.getElementById('btnLihatData').addEventListener('click', () => {
-                if (typeof google !== 'undefined' && google.script) {
+                if (typeof google !== 'undefined' && google.script && google.script.run) {
                     google.script.run.withSuccessHandler(url => window.open(url, '_blank')).getSpreadsheetUrl();
                 } else if (SPREADSHEET_URL !== "") {
                     window.open(SPREADSHEET_URL, '_blank');
@@ -316,8 +361,17 @@
                     // Eksekusi dari dalam Apps Script (Jika berjalan di server Google)
                     if (typeof google !== 'undefined' && google.script && google.script.run) {
                         google.script.run
-                            .withSuccessHandler(() => { showNotification('Berhasil disimpan!', 'success'); resetForm(); btnSimpan.innerText = "Simpan Data"; })
-                            .withFailureHandler((err) => { showNotification('Gagal: ' + err, 'error'); btnSimpan.disabled = false; btnSimpan.innerText = "Simpan Data"; })
+                            .withSuccessHandler(() => { 
+                                showNotification('Berhasil disimpan!', 'success'); 
+                                resetForm(); 
+                                updateTotalKinerjaUI(); // Menambahkan angka secara instan
+                                btnSimpan.innerText = "Simpan Data"; 
+                            })
+                            .withFailureHandler((err) => { 
+                                showNotification('Gagal: ' + err, 'error'); 
+                                btnSimpan.disabled = false; 
+                                btnSimpan.innerText = "Simpan Data"; 
+                            })
                             .simpanDataSpreadsheet(payload);
                     } 
                     // Eksekusi API External (Jika File HTML dibuka secara lokal)
@@ -331,6 +385,7 @@
                             if(result.status === 'success') {
                                 showNotification('Berhasil disimpan (Via API)!', 'success');
                                 resetForm();
+                                updateTotalKinerjaUI();
                             } else {
                                 showNotification('Gagal: ' + result.message, 'error');
                             }
